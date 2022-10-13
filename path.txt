@@ -1,0 +1,37 @@
+/*
+ * Copyright (c) 2014-2022 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import challengeUtils = require('../lib/challengeUtils')
+import { Request, Response, NextFunction } from 'express'
+
+const challenges = require('../data/datacache').challenges
+const db = require('../data/mongodb')
+const security = require('../lib/insecurity')
+
+var sanitize = require('mongo-sanitize');
+
+
+
+//========== S O L U T I O N ===================================
+
+
+module.exports = function productReviews () {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = security.authenticatedUsers.from(req) 
+    db.reviews.update( 
+     
+      { _id: sanitize(req.body.id) }, 
+      { $set: { message: sanitize(req.body.message) } },
+      { multi: true } 
+    ).then(
+      (result: { modified: number, original: Array<{ author: any }> }) => {
+        challengeUtils.solveIf(challenges.noSqlReviewsChallenge, () => { return result.modified > 1 }) 
+        challengeUtils.solveIf(challenges.forgedReviewChallenge, () => { return user?.data && result.original[0] && result.original[0].author !== user.data.email && result.modified === 1 }) 
+        res.json(result)
+      }, (err: unknown) => {
+        res.status(500).json(err)
+      })
+  }
+}
